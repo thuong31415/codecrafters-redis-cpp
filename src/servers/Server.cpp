@@ -6,6 +6,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <csignal>
+#include "../parser/RedisParser.h"
 
 void Server::Start() {
     signal(SIGPIPE, SIG_IGN);
@@ -33,9 +34,8 @@ void Server::HandleServerEvent(const int server_fd, const uint32_t events) {
 void Server::HandleClientEvent(const int client_fd, const uint32_t events) {
     if (events & EPOLLIN) {
         char buffer[1024]{};
-        const std::string response = "+PONG\r\n";
-
         while (read(client_fd, buffer, sizeof(buffer)) > 0) {
+            std::string response = RedisParser::HandleCommand(buffer);
             write(client_fd, response.c_str(), response.size());
         }
     }
