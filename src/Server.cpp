@@ -38,6 +38,19 @@ int CreateSocket() {
 }
 
 
+void HandleClient(const int client_fd) {
+    if (client_fd < 0) {
+        throw std::runtime_error("accept failed");
+    }
+    char buffer[1024]{};
+    const std::string response = "+PONG\r\n";
+
+    while (read(client_fd, buffer, sizeof(buffer)) > 0) {
+        write(client_fd, response.c_str(), response.size());
+    }
+}
+
+
 int main() {
     const int server_fd = CreateSocket();
 
@@ -46,13 +59,7 @@ int main() {
 
     const int client_fd = accept(server_fd, reinterpret_cast<sockaddr *>(&client_addr), &client_addr_len);
 
-    std::cout << "Client connected\n";
-
-    const std::string response = "+PONG\r\n";
-
-    write(client_fd, response.c_str(), response.length());
-
-    close(server_fd);
+    HandleClient(client_fd);
 
     return 0;
 }
