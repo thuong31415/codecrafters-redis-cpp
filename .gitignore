@@ -49,3 +49,6 @@ build/
 vcpkg_installed
 
 cmake-build-debug/
+
+#ide
+.idea/
