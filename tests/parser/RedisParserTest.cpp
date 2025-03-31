@@ -56,16 +56,22 @@ TEST(HandleArray, InputContainEchoCommand_ShouldReturnData) {
 }
 
 TEST(HandleArray, InPutContainSetCommand_ShouldReturnOk) {
-    const std::string input = "*3\r\n$3\r\nSET\r\n$5\r\nmykey\r\n$13\r\nHello, Redis!\r\n";
+    const std::string input = "*3\r\n$3\r\nSET\r\n$9\r\nraspberry\r\n$5\r\nmango\r\n";
     const std::string response = RedisParser::HandleCommand(input);
     EXPECT_EQ("+OK\r\n", response);
 }
 
-TEST(HandleArray, InputContainGetCommand_ShuoldReturnValue) {
-    const std::string command_set_data = "*3\r\n$3\r\nSET\r\n$6\r\nmy_key\r\n$5\r\nhello\r\n";
+TEST(HandleArray, InputContainGetCommand_ShouldReturnValue) {
+    const std::string command_set_data = "*5\r\n$3\r\nSET\r\n$6\r\nmy_key\r\n$5\r\nhello\r\n$2\r\npx\r\n$3\r\n1000000\r\n";
     RedisParser::HandleCommand(command_set_data);
 
     const std::string input = "*2\r\n$3\r\nGET\r\n$6\r\nmy_key\r\n";
     const std::string response = RedisParser::HandleCommand(input);
     EXPECT_EQ("$5\r\nhello\r\n", response);
+}
+
+TEST(HadnleCommandSet, InputSetDataWithTll_ShouldReturnOk) {
+    const std::string input = "*5\r\n$3\r\nSET\r\n$9\r\nraspberry\r\n$5\r\ngrape\r\n$2\r\npx\r\n$3\r\n100\r\n";
+    const std::string response = RedisParser::HandleCommand(input);
+    EXPECT_EQ("+OK\r\n", response);
 }

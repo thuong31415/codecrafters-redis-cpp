@@ -1,5 +1,6 @@
 #include "Utils.h"
 #include <algorithm>
+#include <chrono>
 #include <string>
 
 
@@ -18,4 +19,11 @@ std::optional<size_t> Utils::FindCRLF(const std::string &input) {
 
 bool Utils::IsNumeric(const std::string &input) {
     return std::ranges::all_of(input, ::isdigit);
+}
+
+int64_t Utils::GetCurrentTimestamp() {
+    const auto now = std::chrono::system_clock::now();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+        now.time_since_epoch()
+    ).count();
 }

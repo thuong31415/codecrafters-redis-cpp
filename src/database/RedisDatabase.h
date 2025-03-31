@@ -11,12 +11,14 @@ public:
 
     void set(const std::string &key, const std::string &value);
 
+    void set(const std::string &key, const std::string &value, int64_t ttl);
+
     std::string get(const std::string &key);
 
     void del(const std::string &key);
 
 private:
-    std::unordered_map<std::string, std::string> store_{};
+    std::unordered_map<std::string, std::pair<std::string, int64_t> > store_{};
 };
 
 

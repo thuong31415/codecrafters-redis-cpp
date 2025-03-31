@@ -1,13 +1,17 @@
 #include "EventLoop.h"
+
+#include <cstring>
 #include <stdexcept>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <fcntl.h>
+#include <iostream>
+#include <mutex>
 #include <sys/epoll.h>
 
 EventLoop::EventLoop(const int max_events): max_events_(max_events) {
-    epoll_fd_ = epoll_create1(0);
+    epoll_fd_ = epoll_create1(EPOLL_CLOEXEC);
     if (epoll_fd_ == -1) {
         throw std::runtime_error("Failed to create epoll instance");
     }
@@ -22,18 +26,29 @@ EventLoop::~EventLoop() {
 
 void EventLoop::AddFd(const int fd, const uint32_t events, const EventCallback &callback) {
     SetNonBlocking(fd);
+
     epoll_event event{};
     event.events = events;
     event.data.fd = fd;
+
     if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &event) < 0) {
         throw std::runtime_error("Failed to add fd to epoll");
     }
+
+    std::unique_lock lock(callbacks_mutex_);
     callbacks_[fd] = callback;;
 }
 
-void EventLoop::RemoveFd(const int fd) const {
-    epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr);
+void EventLoop::RemoveFd(const int fd) {
+    if (epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr) < 0 && errno != EBADF) {
+        std::cerr << "Warning: Failed to remove fd from epoll: " << strerror(errno) << std::endl;
+    }
+
+    shutdown(fd, SHUT_RDWR);
     close(fd);
+
+    std::unique_lock lock(callbacks_mutex_);
+    callbacks_.erase(fd);
 }
 
 void EventLoop::SetNonBlocking(const int fd) {
@@ -49,6 +64,7 @@ void EventLoop::SetNonBlocking(const int fd) {
 void EventLoop::Run() {
     while (true) {
         const int n = epoll_wait(epoll_fd_, events_.data(), max_events_, -1);
+
         if (n < 0) {
             if (errno == EINTR) continue;
             throw std::runtime_error("epoll_wait failed");
@@ -57,8 +73,16 @@ void EventLoop::Run() {
         for (int i = 0; i < n; i++) {
             int fd = events_[i].data.fd;
             const uint32_t event_flags = events_[i].events;
-            if (auto it = callbacks_.find(fd); it != callbacks_.end()) {
-                it->second(fd, event_flags);
+
+            EventCallback callback;
+            {
+                std::shared_lock lock(callbacks_mutex_);
+                if (auto it = callbacks_.find(fd); it != callbacks_.end()) {
+                    callback = it->second;
+                }
+            }
+            if (callback) {
+                callback(fd, event_flags);
             }
         }
     }

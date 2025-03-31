@@ -1,5 +1,6 @@
 #ifndef REDIS_PARSER_H
 #define REDIS_PARSER_H
+#include <functional>
 #include <string>
 #include <vector>
 #include "../database/RedisDatabase.h"
@@ -7,7 +8,6 @@
 class RedisParser {
 public:
     static std::string HandleCommand(const std::string &input);
-
 private:
     static RedisDatabase redis_database_;
 
@@ -21,7 +21,7 @@ private:
 
     static std::string HandleBulkString(const std::string &input);
 
-    static std::string HandleArray(const std::string &input);
+    static std::string HandleArrayCommand(const std::string &input);
 };
 
 

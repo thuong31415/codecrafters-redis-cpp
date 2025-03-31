@@ -14,7 +14,7 @@ std::string RedisParser::HandleCommand(const std::string &input) {
         case '-': return HandleError(input);
         case ':': return HandleInteger(input);
         case '$': return HandleBulkString(input);
-        case '*': return HandleArray(input);
+        case '*': return HandleArrayCommand(input);
         default: return "-ERR Unknown command type\r\n";
     }
 }
@@ -85,7 +85,7 @@ std::vector<std::string> RedisParser::parseTokens(const std::string &input) {
     return tokens;
 }
 
-std::string RedisParser::HandleArray(const std::string &input) {
+std::string RedisParser::HandleArrayCommand(const std::string &input) {
     const auto pos_crlf = Utils::FindCRLF(input);
     if (!pos_crlf.has_value()) {
         return "-ERR Invalid array\r\n";
@@ -97,35 +97,44 @@ std::string RedisParser::HandleArray(const std::string &input) {
         return "-ERR Invalid array length\r\n";
     }
 
-    const int array_length = std::stoi(array_length_str);
-    if (array_length <= 0) {
+    if (const int array_length = std::stoi(array_length_str); array_length <= 0) {
         return "-ERR Invalid array length\r\n";
     }
 
     const std::vector<std::string> tokens = parseTokens(input);
 
-    if (array_length == 1) {
-        if ("ping" == Utils::ToLowerCase(tokens[2])) {
-            return "+PONG\r\n";
-        }
-        return "+" + tokens[2] + "\r\n";
+    if (tokens.size() == 2) {
+        return tokens[1] + "\r\n";
     }
 
     const std::string command = Utils::ToLowerCase(tokens[2]);
+
+    if ("ping" == command && tokens.size() == 3) {
+        return "+PONG\r\n";
+    }
 
     if ("echo" == command && tokens.size() == 5) {
         return tokens[3] + "\r\n" + tokens[4] + "\r\n";
     }
 
-    if ("set" == command && tokens.size() == 7) {
-        const std::string key = tokens[4];
-        const std::string value = tokens[6];
-        redis_database_.set(key, value);
-        return "+OK\r\n";
+    if ("set" == command && (tokens.size() == 7 || tokens.size() == 11)) {
+        const std::string &key = tokens[4];
+        const std::string &value = tokens[6];
+
+        if (tokens.size() == 7) {
+            redis_database_.set(key, value, 0);
+            return "+OK\r\n";
+        }
+
+        if (Utils::ToLowerCase(tokens[8]) == "px" && Utils::IsNumeric(tokens[10])) {
+            redis_database_.set(key, value, std::stoi(tokens[10]));
+            return "+OK\r\n";
+        }
+        return "-ERR syntax error\r\n";
     }
 
     if ("get" == command && tokens.size() == 5) {
-        const std::string key = tokens[4];
+        const std::string &key = tokens[4];
         const std::string value = redis_database_.get(key);
         if ("nil" == value) {
             return "$-1\r\n";

@@ -11,6 +11,8 @@ public:
     static std::optional<size_t> FindCRLF(const std::string &input);
 
     static bool IsNumeric(const std::string &input);
+
+    static int64_t  GetCurrentTimestamp();
 };
 
 
