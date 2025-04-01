@@ -142,5 +142,17 @@ std::string RedisParser::HandleArrayCommand(const std::string &input) {
         return "$" + std::to_string(value.length()) + "\r\n" + value + "\r\n";
     }
 
+    if ("config" == command && tokens.size() == 7 && "get" == Utils::ToLowerCase(tokens[4])) {
+        Config &config_ = Config::getInstance();
+        const std::string &config_key = tokens[6];
+        const std::string config_value = config_.get(config_key);
+        return "nil" != config_value ? CreateRESP(config_key, config_value) : "$-1\r\n";
+    }
+
     return "-ERR Invalid command\r\n";
+}
+
+std::string RedisParser::CreateRESP(const std::string &key, const std::string &value) {
+    return "*2\r\n$" + std::to_string(key.size()) + "\r\n" + key + "\r\n" +
+           "$" + std::to_string(value.size()) + "\r\n" + value + "\r\n";
 }
