@@ -31,7 +31,8 @@ private:
 
     // Utility methods
     static std::vector<std::string> ParseTokens(const std::string &input);
-    static  std::string CreateRESP(const std::string& key, const std::string& value);
+    static std::string CreateRESP(const std::string& key, const std::string& value);
+    static std::string ToBulkString(const std::string &val);
 };
 
 

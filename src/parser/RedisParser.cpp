@@ -166,9 +166,20 @@ std::string RedisParser::HandleGetCommand(const std::vector<std::string> &tokens
         return INVALID_COMMAND_ERROR;
     }
     const std::string &key = tokens[4];
-    const std::string value = redis_database_.get(key);
+    std::string value = redis_database_.get(key);
 
-    return "nil" == value ? NIL_RESPONSE : "$" + std::to_string(value.length()) + "\r\n" + value + "\r\n";
+    if ("nil" == value) {
+        Config &config = Config::getInstance();
+        const std::string path = config.get("dir") + "/" + config.get("dbfilename");
+        rdb_reader_.Process(path);
+
+        const auto& data = rdb_reader_.GetData();
+        if (const auto it = data.find(key); it != data.end()) {
+            value = it->second;
+        }
+    }
+
+    return "nil" == value ? NIL_RESPONSE : ToBulkString(value);
 }
 
 std::string RedisParser::HandleConfigCommand(const std::vector<std::string> &tokens) {
@@ -200,6 +211,9 @@ std::string RedisParser::CreateRESP(const std::string &key, const std::string &v
            "$" + std::to_string(value.size()) + "\r\n" + value + "\r\n";
 }
 
+std::string RedisParser::ToBulkString(const std::string &val) {
+    return "$" + std::to_string(val.length()) + "\r\n" + val + "\r\n";
+}
 
 std::vector<std::string> RedisParser::ParseTokens(const std::string &input) {
     std::vector<std::string> tokens;
