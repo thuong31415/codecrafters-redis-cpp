@@ -3,27 +3,34 @@
 #include <string>
 #include <vector>
 
-#include "../config/Config.h"
 #include "../database/RedisDatabase.h"
+#include "../database/RdbReader.h"
 
 class RedisParser {
 public:
-    static std::string HandleCommand(const std::string &input);
+    RedisParser() = default;
+    std::string HandleCommand(const std::string &input);
 private:
-    static RedisDatabase redis_database_;
+    RedisDatabase redis_database_{};
+    RdbReader rdb_reader_{};
 
-    static std::vector<std::string> parseTokens(const std::string &input);
-
+    // RESP Protocol Handlers
     static std::string HandleSimpleString(const std::string &input);
-
     static std::string HandleError(const std::string &input);
-
     static std::string HandleInteger(const std::string &input);
-
     static std::string HandleBulkString(const std::string &input);
+    std::string HandleArrayCommand(const std::string &input);
 
-    static std::string HandleArrayCommand(const std::string &input);
+    // Command Handlers
+    static std::string HandlePingCommand(const std::vector<std::string>& tokens);
+    static std::string HandleEchoCommand(const std::vector<std::string>& tokens);
+    std::string HandleSetCommand(const std::vector<std::string>& tokens);
+    std::string HandleGetCommand(const std::vector<std::string>& tokens);
+    static  std::string HandleConfigCommand(const std::vector<std::string>& tokens);
+    std::string HandleKeysCommand(const std::vector<std::string>& tokens);
 
+    // Utility methods
+    static std::vector<std::string> ParseTokens(const std::string &input);
     static  std::string CreateRESP(const std::string& key, const std::string& value);
 };
 

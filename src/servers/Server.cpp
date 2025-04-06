@@ -35,7 +35,7 @@ void Server::HandleClientEvent(const int client_fd, const uint32_t events) {
     if (events & EPOLLIN) {
         char buffer[1024]{};
         while (read(client_fd, buffer, sizeof(buffer)) > 0) {
-            std::string response = RedisParser::HandleCommand(buffer);
+            std::string response = redis_parser_.HandleCommand(buffer);
             write(client_fd, response.c_str(), response.size());
         }
     }

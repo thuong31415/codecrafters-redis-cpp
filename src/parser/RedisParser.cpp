@@ -1,13 +1,23 @@
 #include "RedisParser.h"
-#include <ostream>
 
+#include "../config/Config.h"
 #include "../utils/Utils.h"
 
-RedisDatabase RedisParser::redis_database_;
+namespace {
+    const std::string OK_RESPONSE = "+OK\r\n";
+    const std::string PONG_RESPONSE = "+PONG\r\n";
+    const std::string NIL_RESPONSE = "$-1\r\n";
+    const std::string INVALID_COMMAND_ERROR = "-ERR Unknown command\r\n";
+    const std::string INVALID_ARRAY_ERROR = "-ERR Invalid array\r\n";
+    const std::string INVALID_BULK_STRING_ERROR = "-ERR Invalid bulk string\r\n";
+    const std::string INVALID_INTEGER_ERROR = "-ERR Invalid integer number\r\n";
+    const std::string SYNTAX_ERROR = "-ERR syntax error\r\n";
+}
+
 
 std::string RedisParser::HandleCommand(const std::string &input) {
     if (input.empty() || !Utils::FindCRLF(input).has_value()) {
-        return "-ERR Unknown command\r\n";
+        return INVALID_COMMAND_ERROR;
     }
     switch (input[0]) {
         case '+': return HandleSimpleString(input);
@@ -15,7 +25,7 @@ std::string RedisParser::HandleCommand(const std::string &input) {
         case ':': return HandleInteger(input);
         case '$': return HandleBulkString(input);
         case '*': return HandleArrayCommand(input);
-        default: return "-ERR Unknown command type\r\n";
+        default: return INVALID_COMMAND_ERROR;
     }
 }
 
@@ -23,7 +33,7 @@ std::string RedisParser::HandleSimpleString(const std::string &input) {
     const auto pos = Utils::FindCRLF(input);
     const std::string data = input.substr(1, *pos - 1);
 
-    return (Utils::ToLowerCase(data) == "ping") ? "+PONG\r\n" : "+" + data + "\r\n";
+    return Utils::ToLowerCase(data) == "ping" ? PONG_RESPONSE : "+" + data + "\r\n";
 }
 
 std::string RedisParser::HandleError(const std::string &input) {
@@ -35,36 +45,34 @@ std::string RedisParser::HandleError(const std::string &input) {
 std::string RedisParser::HandleInteger(const std::string &input) {
     const auto pos = Utils::FindCRLF(input);
     const std::string data = input.substr(1, *pos - 1);
-    if (!Utils::IsNumeric(data)) {
-        return "-ERR Invalid integer number\r\n";
-    }
-    return ":" + data + "\r\n";
+
+    return !Utils::IsNumeric(data) ? INVALID_INTEGER_ERROR : ":" + data + "\r\n";
 }
 
 std::string RedisParser::HandleBulkString(const std::string &input) {
     const auto pos_crlf = Utils::FindCRLF(input);
 
     if (!pos_crlf.has_value()) {
-        return "-ERR Invalid bulk string\r\n";
+        return INVALID_BULK_STRING_ERROR;
     }
 
     const auto prefix_length_str = input.substr(1, *pos_crlf - 1);
 
     if (!Utils::IsNumeric(prefix_length_str)) {
-        return "-ERR Invalid bulk string\r\n";
+        return INVALID_BULK_STRING_ERROR;
     }
 
     const int prefix_length = std::stoi(prefix_length_str);
 
     if (prefix_length == -1) {
-        return "$-1\r\n";
+        return NIL_RESPONSE;
     }
 
     const size_t content_start = *pos_crlf + 2;
     size_t content_end = content_start + prefix_length;
 
     if (content_end + 2 > input.size() || input.substr(content_end, 2) != "\r\n") {
-        return "-ERR Invalid bulk string\r\n";
+        return INVALID_BULK_STRING_ERROR;
     }
 
     const std::string content = input.substr(content_start, prefix_length);
@@ -72,8 +80,128 @@ std::string RedisParser::HandleBulkString(const std::string &input) {
     return "$" + std::to_string(prefix_length) + "\r\n" + content + "\r\n";
 }
 
+std::string RedisParser::HandleArrayCommand(const std::string &input) {
+    const auto pos_crlf = Utils::FindCRLF(input);
+    if (!pos_crlf.has_value()) {
+        return INVALID_ARRAY_ERROR;
+    }
 
-std::vector<std::string> RedisParser::parseTokens(const std::string &input) {
+    const auto array_length_str = input.substr(1, *pos_crlf - 1);
+
+    if (!Utils::IsNumeric(array_length_str)) {
+        return INVALID_ARRAY_ERROR;
+    }
+
+    if (const int array_length = std::stoi(array_length_str); array_length <= 0) {
+        return INVALID_ARRAY_ERROR;
+    }
+
+    const std::vector<std::string> tokens = ParseTokens(input);
+
+    if (tokens.size() == 2) {
+        return tokens[1] + "\r\n";
+    }
+
+    const std::string command = Utils::ToLowerCase(tokens[2]);
+
+    if ("ping" == command) {
+        return HandlePingCommand(tokens);
+    }
+
+    if ("echo" == command) {
+        return HandleEchoCommand(tokens);
+    }
+
+    if ("set" == command) {
+        return HandleSetCommand(tokens);
+    }
+
+    if ("get" == command) {
+        return HandleGetCommand(tokens);
+    }
+
+    if ("config" == command) {
+        return HandleConfigCommand(tokens);
+    }
+
+    if ("keys" == command) {
+        return HandleKeysCommand(tokens);
+    }
+
+    return SYNTAX_ERROR;
+}
+
+std::string RedisParser::HandlePingCommand(const std::vector<std::string> &tokens) {
+    return tokens.size() == 3 ? PONG_RESPONSE : INVALID_COMMAND_ERROR;
+}
+
+std::string RedisParser::HandleEchoCommand(const std::vector<std::string> &tokens) {
+    return tokens.size() == 5 ? tokens[3] + "\r\n" + tokens[4] + "\r\n" : INVALID_COMMAND_ERROR;
+}
+
+std::string RedisParser::HandleSetCommand(const std::vector<std::string> &tokens) {
+    if (tokens.size() != 7 && tokens.size() != 11) {
+        return INVALID_COMMAND_ERROR;
+    }
+
+    const std::string &key = tokens[4];
+    const std::string &value = tokens[6];
+
+    if (tokens.size() == 7) {
+        redis_database_.set(key, value, 0);
+        return OK_RESPONSE;
+    }
+
+    if (Utils::ToLowerCase(tokens[8]) == "px" && Utils::IsNumeric(tokens[10])) {
+        redis_database_.set(key, value, std::stoi(tokens[10]));
+        return OK_RESPONSE;
+    }
+
+    return SYNTAX_ERROR;
+}
+
+
+std::string RedisParser::HandleGetCommand(const std::vector<std::string> &tokens) {
+    if (tokens.size() != 5) {
+        return INVALID_COMMAND_ERROR;
+    }
+    const std::string &key = tokens[4];
+    const std::string value = redis_database_.get(key);
+
+    return "nil" == value ? NIL_RESPONSE : "$" + std::to_string(value.length()) + "\r\n" + value + "\r\n";
+}
+
+std::string RedisParser::HandleConfigCommand(const std::vector<std::string> &tokens) {
+    if (tokens.size() == 7 && "get" == Utils::ToLowerCase(tokens[4])) {
+        Config &config = Config::getInstance();
+        const std::string &config_key = tokens[6];
+        const std::string config_value = config.get(config_key);
+        return "nil" == config_value ? NIL_RESPONSE : CreateRESP(config_key, config_value);
+    }
+    return SYNTAX_ERROR;
+}
+
+std::string RedisParser::HandleKeysCommand(const std::vector<std::string> &tokens) {
+    if (tokens.size() == 5 && "*" == tokens[4]) {
+        Config &config = Config::getInstance();
+        const std::string path = config.get("dir") + "/" + config.get("dbfilename");
+        rdb_reader_.Process(path);
+
+        const std::string key = rdb_reader_.GetData().begin()->first;
+
+        return "*1\r\n$" + std::to_string(key.length()) + "\r\n" + key + "\r\n";
+    }
+    return INVALID_COMMAND_ERROR;
+}
+
+
+std::string RedisParser::CreateRESP(const std::string &key, const std::string &value) {
+    return "*2\r\n$" + std::to_string(key.size()) + "\r\n" + key + "\r\n" +
+           "$" + std::to_string(value.size()) + "\r\n" + value + "\r\n";
+}
+
+
+std::vector<std::string> RedisParser::ParseTokens(const std::string &input) {
     std::vector<std::string> tokens;
     size_t start = 0;
     while (start < input.size()) {
@@ -83,76 +211,4 @@ std::vector<std::string> RedisParser::parseTokens(const std::string &input) {
         start = pos + 2;
     }
     return tokens;
-}
-
-std::string RedisParser::HandleArrayCommand(const std::string &input) {
-    const auto pos_crlf = Utils::FindCRLF(input);
-    if (!pos_crlf.has_value()) {
-        return "-ERR Invalid array\r\n";
-    }
-
-    const auto array_length_str = input.substr(1, *pos_crlf - 1);
-
-    if (!Utils::IsNumeric(array_length_str)) {
-        return "-ERR Invalid array length\r\n";
-    }
-
-    if (const int array_length = std::stoi(array_length_str); array_length <= 0) {
-        return "-ERR Invalid array length\r\n";
-    }
-
-    const std::vector<std::string> tokens = parseTokens(input);
-
-    if (tokens.size() == 2) {
-        return tokens[1] + "\r\n";
-    }
-
-    const std::string command = Utils::ToLowerCase(tokens[2]);
-
-    if ("ping" == command && tokens.size() == 3) {
-        return "+PONG\r\n";
-    }
-
-    if ("echo" == command && tokens.size() == 5) {
-        return tokens[3] + "\r\n" + tokens[4] + "\r\n";
-    }
-
-    if ("set" == command && (tokens.size() == 7 || tokens.size() == 11)) {
-        const std::string &key = tokens[4];
-        const std::string &value = tokens[6];
-
-        if (tokens.size() == 7) {
-            redis_database_.set(key, value, 0);
-            return "+OK\r\n";
-        }
-
-        if (Utils::ToLowerCase(tokens[8]) == "px" && Utils::IsNumeric(tokens[10])) {
-            redis_database_.set(key, value, std::stoi(tokens[10]));
-            return "+OK\r\n";
-        }
-        return "-ERR syntax error\r\n";
-    }
-
-    if ("get" == command && tokens.size() == 5) {
-        const std::string &key = tokens[4];
-        const std::string value = redis_database_.get(key);
-        if ("nil" == value) {
-            return "$-1\r\n";
-        }
-        return "$" + std::to_string(value.length()) + "\r\n" + value + "\r\n";
-    }
-
-    if ("config" == command && tokens.size() == 7 && "get" == Utils::ToLowerCase(tokens[4])) {
-        Config &config_ = Config::getInstance();
-        const std::string &config_key = tokens[6];
-        const std::string config_value = config_.get(config_key);
-        return "nil" != config_value ? CreateRESP(config_key, config_value) : "$-1\r\n";
-    }
-
-    return "-ERR Invalid command\r\n";
-}
-
-std::string RedisParser::CreateRESP(const std::string &key, const std::string &value) {
-    return "*2\r\n$" + std::to_string(key.size()) + "\r\n" + key + "\r\n" +
-           "$" + std::to_string(value.size()) + "\r\n" + value + "\r\n";
 }
