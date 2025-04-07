@@ -10,6 +10,7 @@ class RedisParser {
 public:
     RedisParser() = default;
     std::string HandleCommand(const std::string &input);
+    static std::string ToArrayString(const std::vector<std::string> &tokens);
 private:
     RedisDatabase redis_database_{};
     RdbReader rdb_reader_{};
@@ -33,6 +34,7 @@ private:
     static std::vector<std::string> ParseTokens(const std::string &input);
     static std::string CreateRESP(const std::string& key, const std::string& value);
     static std::string ToBulkString(const std::string &val);
+
 };
 
 

@@ -173,7 +173,7 @@ std::string RedisParser::HandleGetCommand(const std::vector<std::string> &tokens
         const std::string path = config.get("dir") + "/" + config.get("dbfilename");
         rdb_reader_.Process(path);
 
-        const auto& data = rdb_reader_.GetData();
+        const auto &data = rdb_reader_.GetData();
         if (const auto it = data.find(key); it != data.end()) {
             value = it->second;
         }
@@ -197,10 +197,8 @@ std::string RedisParser::HandleKeysCommand(const std::vector<std::string> &token
         Config &config = Config::getInstance();
         const std::string path = config.get("dir") + "/" + config.get("dbfilename");
         rdb_reader_.Process(path);
-
-        const std::string key = rdb_reader_.GetData().begin()->first;
-
-        return "*1\r\n$" + std::to_string(key.length()) + "\r\n" + key + "\r\n";
+        const auto keys = rdb_reader_.GetKeys();
+        return ToArrayString(keys);
     }
     return INVALID_COMMAND_ERROR;
 }
@@ -213,6 +211,15 @@ std::string RedisParser::CreateRESP(const std::string &key, const std::string &v
 
 std::string RedisParser::ToBulkString(const std::string &val) {
     return "$" + std::to_string(val.length()) + "\r\n" + val + "\r\n";
+}
+
+std::string RedisParser::ToArrayString(const std::vector<std::string> &tokens) {
+    std::string result = "*" + std::to_string(tokens.size()) + "\r\n";
+
+    for (const auto &token: tokens) {
+        result += ToBulkString(token);
+    }
+    return result;
 }
 
 std::vector<std::string> RedisParser::ParseTokens(const std::string &input) {

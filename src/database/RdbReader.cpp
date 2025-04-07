@@ -34,16 +34,21 @@ void RdbReader::Process(const std::string &filename) {
 std::string RdbReader::ReadString() {
     uint8_t byte{};
     if (!file_.read(reinterpret_cast<char *>(&byte), 1)) {
+        std::cerr << "Failed to read length byte at position " << file_.tellg() << std::endl;
         return "";
     }
 
     const uint8_t length_type = byte & LENGTH_MASK;
     uint32_t length = 0;
 
-
     auto read_bytes = [&](char *buffer, const size_t size) -> bool {
         file_.read(buffer, size);
-        return file_.gcount() == size;
+        const bool success = file_.gcount() == size;
+        if (!success) {
+            std::cerr << "Failed to read " << size << " bytes at position " << file_.tellg() << ", got " << file_.
+                    gcount() << std::endl;
+        }
+        return success;
     };
 
     switch (length_type) {
@@ -68,11 +73,11 @@ std::string RdbReader::ReadString() {
             return ReadSpecialEncoding(special_type);
         }
         default:
-            return "[[UNKNOWN_LENGTH_TYPE]]";
+            std::cerr << "Unknown length type: " << static_cast<int>(length_type) << std::endl;
+            return "UNKNOWN_LENGTH_TYPE";
     }
 
     std::string result(length, '\0');
-
     if (!read_bytes(&result[0], length)) {
         return "";
     }
@@ -107,34 +112,63 @@ std::string RdbReader::ReadSpecialEncoding(const uint8_t type) {
 }
 
 void RdbReader::ProcessRdbFile() {
+    char magic[9];
+    if (!file_.read(magic, 9)) {
+        return;
+    }
+
+    std::string magic_str(magic, 5);
+    if (magic_str != "REDIS") {
+        return;
+    }
+    std::cout << "Redis version: " << std::string(magic + 5, 4) << std::endl;
+
     uint8_t op_code{};
     while (file_.read(reinterpret_cast<char *>(&op_code), 1)) {
         if (op_code == 0xFF) {
             break;
         }
 
-        if (op_code == 0xFA || op_code == 0xFE || op_code == 0xFC || op_code == 0xFD) {
+        if (op_code == 0xFA) {
+            std::string key = ReadString();
+            std::string value = ReadString();
+            if (key.empty() || value.empty()) {
+                std::cerr << "Error: Unable to read auxiliary field at position " << file_.tellg() << std::endl;
+                return;
+            }
+        }
+
+        if (op_code == 0xFE) {
+            uint8_t db_number;
+            if (!file_.read(reinterpret_cast<char *>(&db_number), 1)) {
+                std::cerr << "Error: Unable to read database selector at position " << file_.tellg() << std::endl;
+                return;
+            }
+        }
+
+        if (op_code == 0xFC || op_code == 0xFD) {
             continue;
         }
 
         if (op_code == 0xFB) {
             uint8_t size1, size2;
             if (!file_.read(reinterpret_cast<char *>(&size1), 1) || !file_.read(reinterpret_cast<char *>(&size2), 1)) {
-                std::cerr << "Lỗi khi đọc kích thước sau op_code 0xFB" << std::endl;
+                std::cerr << "Error reading size after op_code 0xFB at position " << file_.tellg() << std::endl;
                 return;
             }
+            continue;
         }
 
         if (op_code == 0x00) {
-            std::string key = ReadString();
-            std::string value = ReadString();
-            if (!key.empty() && !value.empty() && "UNKNOWN_ENCODING" != key) {
+            const std::string key = ReadString();
+            const std::string value = ReadString();
+
+            if ("UNKNOWN_ENCODING" != key && !key.empty() && !value.empty()) {
                 data_[key] = value;
             }
         }
     }
 }
-
 
 std::vector<std::string> RdbReader::GetKeys() const {
     std::vector<std::string> keys;
