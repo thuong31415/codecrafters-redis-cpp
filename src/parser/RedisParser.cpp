@@ -178,7 +178,6 @@ std::string RedisParser::HandleGetCommand(const std::vector<std::string> &tokens
             value = it->second;
         }
     }
-
     return "nil" == value ? NIL_RESPONSE : ToBulkString(value);
 }
 
