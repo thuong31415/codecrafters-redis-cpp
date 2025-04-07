@@ -1,7 +1,6 @@
 #include "servers/Server.h"
 #include "config/Config.h"
 
-
 int main(const int argc, char *argv[]) {
 
     Config& config = Config::getInstance();
