@@ -130,6 +130,10 @@ std::string RedisParser::HandleArrayCommand(const std::string &input) {
         return HandleKeysCommand(tokens);
     }
 
+    if ("type" == command) {
+        return HandleTypeCommand(tokens);
+    }
+
     return SYNTAX_ERROR;
 }
 
@@ -164,9 +168,7 @@ std::string RedisParser::HandleSetCommand(const std::vector<std::string> &tokens
 
 
 std::string RedisParser::HandleGetCommand(const std::vector<std::string> &tokens) {
-    if (tokens.size() != 5) {
-        return INVALID_COMMAND_ERROR;
-    }
+
     const std::string &key = tokens[4];
     std::string value = redis_database_.get(key);
 
@@ -215,6 +217,16 @@ std::string RedisParser::HandleKeysCommand(const std::vector<std::string> &token
     return INVALID_COMMAND_ERROR;
 }
 
+std::string RedisParser::HandleTypeCommand(const std::vector<std::string> &tokens) {
+    const std::string &key = tokens[4];
+    const std::string value = redis_database_.get(key);
+
+    if ("nil" == value) {
+        return ToSimpleString("none");
+    }
+    return ToSimpleString("string");
+}
+
 
 std::string RedisParser::CreateRESP(const std::string &key, const std::string &value) {
     return "*2\r\n$" + std::to_string(key.size()) + "\r\n" + key + "\r\n" +
@@ -223,6 +235,10 @@ std::string RedisParser::CreateRESP(const std::string &key, const std::string &v
 
 std::string RedisParser::ToBulkString(const std::string &val) {
     return "$" + std::to_string(val.length()) + "\r\n" + val + "\r\n";
+}
+
+std::string RedisParser::ToSimpleString(const std::string &val) {
+    return "+" + val + "\r\n";
 }
 
 std::string RedisParser::ToArrayString(const std::vector<std::string> &tokens) {

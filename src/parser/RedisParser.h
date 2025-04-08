@@ -29,11 +29,13 @@ private:
     std::string HandleGetCommand(const std::vector<std::string>& tokens);
     static  std::string HandleConfigCommand(const std::vector<std::string>& tokens);
     std::string HandleKeysCommand(const std::vector<std::string>& tokens);
+    std::string HandleTypeCommand(const std::vector<std::string>& tokens);
 
     // Utility methods
     static std::vector<std::string> ParseTokens(const std::string &input);
     static std::string CreateRESP(const std::string& key, const std::string& value);
     static std::string ToBulkString(const std::string &val);
+    static std::string ToSimpleString(const std::string &val);
 
 };
 
