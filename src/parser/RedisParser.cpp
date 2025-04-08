@@ -1,5 +1,7 @@
 #include "RedisParser.h"
 
+#include <iostream>
+
 #include "../config/Config.h"
 #include "../utils/Utils.h"
 
@@ -168,17 +170,28 @@ std::string RedisParser::HandleGetCommand(const std::vector<std::string> &tokens
     const std::string &key = tokens[4];
     std::string value = redis_database_.get(key);
 
-    if ("nil" == value) {
-        Config &config = Config::getInstance();
-        const std::string path = config.get("dir") + "/" + config.get("dbfilename");
-        rdb_reader_.Process(path);
-
-        const auto &data = rdb_reader_.GetData();
-        if (const auto it = data.find(key); it != data.end()) {
-            value = it->second;
-        }
+    if ("nil" != value) {
+        return ToBulkString(value);
     }
-    return "nil" == value ? NIL_RESPONSE : ToBulkString(value);
+
+    Config &config = Config::getInstance();
+    const std::string path = config.get("dir") + "/" + config.get("dbfilename");
+    rdb_reader_.Process(path);
+
+    const auto &data = rdb_reader_.GetData();
+
+    const auto it = data.find(key);
+
+    if (it == data.end()) {
+        return NIL_RESPONSE;
+    }
+
+    value = it->second.first;
+
+    if (const int64_t ttl = it->second.second; ttl > 0 && ttl <= Utils::GetCurrentTimestamp()) {
+        return NIL_RESPONSE;
+    }
+    return ToBulkString(value);
 }
 
 std::string RedisParser::HandleConfigCommand(const std::vector<std::string> &tokens) {

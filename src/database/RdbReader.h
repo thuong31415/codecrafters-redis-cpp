@@ -17,7 +17,7 @@ public:
 
     void Process(const std::string &filename);
 
-    std::unordered_map<std::string, std::string> GetData() { return data_; };
+    std::unordered_map<std::string, std::pair<std::string, int64_t>> GetData() { return data_; };
 
     std::vector<std::string> GetKeys() const;
 
@@ -30,7 +30,7 @@ private:
 
     std::string ReadSpecialEncoding(uint8_t type);
 
-    std::unordered_map<std::string, std::string> data_;
+    std::unordered_map<std::string, std::pair<std::string, int64_t>> data_{};
 };
 
 

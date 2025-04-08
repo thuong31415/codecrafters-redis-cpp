@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <iostream>
+#include <chrono>
 
 constexpr uint8_t LENGTH_MASK = 0xC0; // Mask to extract the first 2 bits
 constexpr uint8_t LENGTH_6BIT = 0x00; // Length encoded in 6 bits
@@ -146,8 +147,41 @@ void RdbReader::ProcessRdbFile() {
             }
         }
 
-        if (op_code == 0xFC || op_code == 0xFD) {
-            continue;
+        if (op_code == 0xFC) {
+            uint64_t ttl_ms;
+            if (!file_.read(reinterpret_cast<char *>(&ttl_ms), 8)) {
+                return;
+            }
+            uint8_t valueType;
+            if (!file_.read(reinterpret_cast<char *>(&valueType), 1)) {
+                return;
+            }
+            if (valueType == 0x00) {
+                const std::string key = ReadString();
+                const std::string value = ReadString();
+                if ("UNKNOWN_ENCODING" != key && !key.empty() && !value.empty()) {
+                    data_[key] = {value, ttl_ms};
+                }
+            }
+        }
+
+        if (op_code == 0xFD) {
+            uint32_t ttl_seconds;
+            if (!file_.read(reinterpret_cast<char *>(&ttl_seconds), 4)) {
+                return;
+            }
+            uint8_t valueType;
+            if (!file_.read(reinterpret_cast<char *>(&valueType), 1)) {
+                return;
+            }
+            if (valueType == 0x00) {
+                const std::string key = ReadString();
+                const std::string value = ReadString();
+                if ("UNKNOWN_ENCODING" != key && !key.empty() && !value.empty()) {
+                    uint64_t ttl_ms = static_cast<uint64_t>(ttl_seconds) * 1000;
+                    data_[key] = {value, ttl_ms};
+                }
+            }
         }
 
         if (op_code == 0xFB) {
@@ -164,7 +198,7 @@ void RdbReader::ProcessRdbFile() {
             const std::string value = ReadString();
 
             if ("UNKNOWN_ENCODING" != key && !key.empty() && !value.empty()) {
-                data_[key] = value;
+                data_[key] = {value, -1};
             }
         }
     }
