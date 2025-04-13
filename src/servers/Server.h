@@ -1,11 +1,8 @@
-#ifndef SERVER_H
-#define SERVER_H
-
-#include <RedisParser.h>
+#pragma once
 
 #include "../network/Socket.h"
 #include  "../network/EventLoop.h"
-
+#include "../command/CommandExecutor.h"
 
 class Server {
 public:
@@ -16,12 +13,7 @@ public:
 private:
     Socket socket_;
     EventLoop event_loop_;
-    RedisParser redis_parser_;
 
     void HandleServerEvent(int server_fd, uint32_t events);
-
-    void HandleClientEvent(int client_fd, uint32_t events);
+    static void HandleClientEvent(int client_fd, uint32_t events);
 };
-
-
-#endif //SERVER_H

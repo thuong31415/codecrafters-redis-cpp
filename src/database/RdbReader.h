@@ -1,5 +1,4 @@
-#ifndef RDB_READER_H
-#define RDB_READER_H
+#pragma once
 
 #include <cstdint>
 #include <fstream>
@@ -33,5 +32,3 @@ private:
     std::unordered_map<std::string, std::pair<std::string, int64_t>> data_{};
 };
 
-
-#endif //RDB_READER_H

@@ -1,25 +1,34 @@
-#ifndef REDIS_DATABASE_H
-#define REDIS_DATABASE_H
+#pragma once
+
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 class RedisDatabase {
 public:
-    RedisDatabase();
+    RedisDatabase(const RedisDatabase&) = delete;
+    RedisDatabase& operator=(const RedisDatabase&) = delete;
+    RedisDatabase(RedisDatabase&&) = delete;
+    RedisDatabase& operator=(RedisDatabase&&) = delete;
 
-    ~RedisDatabase();
+    static RedisDatabase &GetInstance() {
+        static RedisDatabase instance;
+        return instance;
+    }
 
-    void set(const std::string &key, const std::string &value);
+    void Set(const std::string &key, const std::string &value);
 
-    void set(const std::string &key, const std::string &value, int64_t ttl);
+    void Set(const std::string &key, const std::string &value, int64_t ttl);
 
-    std::string get(const std::string &key);
+    std::string Get(const std::string &key);
 
-    void del(const std::string &key);
+    void Del(const std::string &key);
+
+    std::vector<std::string> GetAllKeys() const;
 
 private:
+    RedisDatabase() = default;
+    ~RedisDatabase() = default;
+
     std::unordered_map<std::string, std::pair<std::string, int64_t> > store_{};
 };
-
-
-#endif //REDIS_DATABASE_H

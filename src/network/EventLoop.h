@@ -1,5 +1,4 @@
-#ifndef EVENT_LOOP_H
-#define EVENT_LOOP_H
+#pragma once
 
 #include <functional>
 #include <sys/epoll.h>
@@ -38,6 +37,3 @@ private:
 
     static void SetNonBlocking(int fd);
 };
-
-
-#endif //EVENT_LOOP_H

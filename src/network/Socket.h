@@ -1,5 +1,4 @@
-#ifndef SOCKET_H
-#define SOCKET_H
+#pragma once
 #include <cstdint>
 
 class Socket {
@@ -18,6 +17,3 @@ private:
     int server_fd_;
     uint16_t port_;
 };
-
-
-#endif //SOCKET_H

@@ -1,5 +1,4 @@
-#ifndef UTILS_H
-#define UTILS_H
+#pragma once
 
 #include <string>
 #include <optional>
@@ -14,6 +13,3 @@ public:
 
     static int64_t  GetCurrentTimestamp();
 };
-
-
-#endif //UTILS_H
