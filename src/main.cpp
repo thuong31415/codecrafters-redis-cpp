@@ -2,6 +2,7 @@
 #include "servers/Server.h"
 #include "config/Config.h"
 #include "utils/Utils.h"
+#include "database/RedisDatabase.h"
 
 void ProcessCommandLineArgs(const int argc, char *argv[], Config &config) {
     for (int i = 0; i < argc; i++) {

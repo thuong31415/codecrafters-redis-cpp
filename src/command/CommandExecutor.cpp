@@ -1,11 +1,21 @@
 #include "CommandExecutor.h"
-
 #include <algorithm>
 #include <iostream>
-#include <RespParser.h>
-#include <RespTypes.h>
-#include <Utils.h>
+#include "../database/RedisDatabase.h"
+#include "../parser/RespParser.h"
+#include "../parser/RespTypes.h"
+#include "../utils/Utils.h"
 #include "../config/Config.h"
+
+std::unordered_map<std::string, CommandExecutor::CommandHandler> CommandExecutor::command_handler_ = {
+    {"PING", HandlePingCommand},
+    {"ECHO", HandleEchoCommand},
+    {"GET", HandleGetCommand},
+    {"SET", HandleSetCommand},
+    {"CONFIG", HandleConfigCommand},
+    {"KEYS", HandleKeyCommand},
+    {"TYPE", HandleTypeCommand}
+};
 
 std::string CommandExecutor::Executor(const std::string &input) {
     const RespEntry entry = RespParser::ParseCommand(input);
@@ -23,16 +33,14 @@ std::string CommandExecutor::Executor(const std::string &input) {
     auto cmd = std::get<std::string>(items[0].value);
     std::ranges::transform(cmd, cmd.begin(), ::toupper);
 
-    if (cmd == "PING") return RespParser::ToSimpleString("PONG");
-    if (cmd == "ECHO") return HandleEchoCommand(items);
-    if (cmd == "GET") return HandleGetCommand(items);
-    if (cmd == "SET") return HandleSetCommand(items);
-    if (cmd == "DEL") return HandleDelCommand(items);
-    if (cmd == "CONFIG") return HandleConfigCommand(items);
-    if (cmd == "KEYS") return HandleKeyCommand(items);
-    if (cmd == "TYPE") return HandleTypeCommand(items);
-
+    if (const auto it = command_handler_.find(cmd); it != command_handler_.end()) {
+        return it->second(items);
+    }
     return RespParser::ToError("ERR wrong Command");
+}
+
+std::string CommandExecutor::HandlePingCommand(const std::vector<RespEntry> &entries) {
+    return RespParser::ToSimpleString("PONG");
 }
 
 std::string CommandExecutor::HandleEchoCommand(const std::vector<RespEntry> &entries) {
@@ -89,10 +97,6 @@ std::string CommandExecutor::HandleSetCommand(const std::vector<RespEntry> &entr
     }
 
     return RespParser::ToError("ERR syntax error");
-}
-
-std::string CommandExecutor::HandleDelCommand(const std::vector<RespEntry> &entries) {
-    return "";
 }
 
 std::string CommandExecutor::HandleConfigCommand(const std::vector<RespEntry> &entries) {
