@@ -6,6 +6,7 @@
 #include "../parser/RespTypes.h"
 #include "../utils/Utils.h"
 #include "../config/Config.h"
+#include "../database/RedisStream.h"
 
 std::unordered_map<std::string, CommandExecutor::CommandHandler> CommandExecutor::command_handler_ = {
     {"PING", HandlePingCommand},
@@ -14,7 +15,8 @@ std::unordered_map<std::string, CommandExecutor::CommandHandler> CommandExecutor
     {"SET", HandleSetCommand},
     {"CONFIG", HandleConfigCommand},
     {"KEYS", HandleKeyCommand},
-    {"TYPE", HandleTypeCommand}
+    {"TYPE", HandleTypeCommand},
+    {"XADD", HandleXAddCommand}
 };
 
 std::string CommandExecutor::Executor(const std::string &input) {
@@ -138,8 +140,26 @@ std::string CommandExecutor::HandleTypeCommand(const std::vector<RespEntry> &ent
     const auto key = std::get<std::string>(entries[1].value);
     const std::string value = RedisDatabase::GetInstance().Get(key);
 
+    if (RedisStream::GetInstance().ExistStreamKey(key)) {
+        return RespParser::ToSimpleString("stream");
+    }
+
     if ("nil" == value) {
         return RespParser::ToSimpleString("none");
     }
     return RespParser::ToSimpleString("string");
+}
+
+std::string CommandExecutor::HandleXAddCommand(const std::vector<RespEntry> &entries) {
+
+    if (entries.size() != 5) {
+        return RespParser::ToError("ERR wrong number of arguments for 'xadd' command");
+    }
+
+    const auto stream_name = std::get<std::string>(entries[1].value);
+    const auto entry_id = std::get<std::string>(entries[2].value);
+    const auto key = std::get<std::string>(entries[3].value);
+    const auto value = std::get<std::string>(entries[4].value);
+
+    return RedisStream::GetInstance().Add(stream_name, entry_id, key, value);
 }

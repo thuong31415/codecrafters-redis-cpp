@@ -30,4 +30,6 @@ private:
     static std::string HandleKeyCommand(const std::vector<RespEntry> &entries);
 
     static std::string HandleTypeCommand(const std::vector<RespEntry> &entries);
+
+    static std::string HandleXAddCommand(const std::vector<RespEntry> &entries);
 };
