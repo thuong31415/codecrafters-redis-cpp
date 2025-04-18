@@ -6,6 +6,22 @@ std::string RedisStream::Add(const std::string &stream_key,
                              const std::string &entry_id,
                              const std::string &key,
                              const std::string &value) {
+    int64_t new_timestamp{};
+    int64_t new_sequence{0};
+
+    auto add_new_stream = [&]()-> std::string {
+        const StreamEntry new_entry{new_timestamp, new_sequence, key, value};
+        stream_entries_[stream_key].push_back(new_entry);
+        const std::string new_entry_id = std::to_string(new_timestamp) + "-" + std::to_string(new_sequence);
+        return RespParser::ToBulkString(new_entry_id);
+    };
+
+    if (entry_id == "*") {
+        new_timestamp = Utils::GetCurrentTimestamp();
+        new_sequence = 0;
+        return add_new_stream();
+    }
+
     const auto pos = entry_id.find('-');
     if (pos == std::string::npos) {
         return RespParser::ToError("ERR wrong format of entry_id");
@@ -18,15 +34,7 @@ std::string RedisStream::Add(const std::string &stream_key,
         return RespParser::ToError("ERR wrong number of arguments for 'xadd' command");
     }
 
-    const int64_t new_timestamp = std::stoll(timestamp_str);
-    int64_t new_sequence{0};
-
-    auto add_new_stream = [&]()-> std::string {
-        const StreamEntry new_entry{new_timestamp, new_sequence, key, value};
-        stream_entries_[stream_key].push_back(new_entry);
-        const std::string new_entry_id = std::to_string(new_timestamp) + "-" + std::to_string(new_sequence);
-        return RespParser::ToBulkString(new_entry_id);
-    };
+    new_timestamp = std::stoll(timestamp_str);
 
     if (!stream_entries_.contains(stream_key)) {
         if (sequence_str == "*") {
