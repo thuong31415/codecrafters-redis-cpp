@@ -204,7 +204,8 @@ std::string CommandExecutor::HandleXRangeCommand(const std::vector<RespEntry> &e
 }
 
 std::string CommandExecutor::HandleXReadCommand(const std::vector<RespEntry> &entries) {
-    if (entries.size() != 4) {
+
+    if (entries.size() < 4) {
         return RespParser::Error("ERR wrong number of arguments for 'xread' command");
     }
 
@@ -215,36 +216,53 @@ std::string CommandExecutor::HandleXReadCommand(const std::vector<RespEntry> &en
         return RespParser::Error("ERR syntax error");
     }
 
-    const auto stream_key = std::get<std::string>(entries[2].value);
-    const auto entry_id = std::get<std::string>(entries[3].value);
+    std::vector<std::string> stream_keys{}, entry_ids{};
 
-    const std::vector<StreamEntry> stream_entries = RedisStream::GetInstance().GetByStreamKey(stream_key);
-
-    if (stream_entries.empty()) {
-        return RespParser::Empty();
-    }
-
-    const StreamEntry stream_entry{entry_id};
-
-    std::vector<StreamEntry> find_results{};
-
-    for (const auto &entry: stream_entries) {
-        if (entry >= stream_entry) {
-            find_results.push_back(entry);
+    for (int i = 2; i < entries.size(); i++) {
+        auto data = std::get<std::string>(entries[i].value);
+        if (data.find("-") != std::string::npos) {
+            entry_ids.push_back(data);
+        } else {
+            stream_keys.push_back(data);
         }
     }
 
-    if (find_results.empty()) {
-        return RespParser::Nil();
+    if (stream_keys.size() != entry_ids.size()) {
+        return RespParser::Error("ERR Unbalanced 'xread' list of streams: for each stream key an ID or '$' must be specified.");
     }
 
-    std::string resp = "*1\r\n";
-    resp += "*2\r\n";
-    resp += RespParser::ToBulkString(stream_key);
-    resp += "*" + std::to_string(find_results.size()) + "\r\n";
+    std::string resp = "*" + std::to_string(stream_keys.size()) + "\r\n";
 
-    for (const auto &item: find_results) {
-        resp += item.ToResp();
+    for (int i = 0; i < static_cast<int>(stream_keys.size()); i++) {
+
+        const auto stream_key = stream_keys[i];
+        const auto entry_id = entry_ids[i];
+
+        const auto stream_entries = RedisStream::GetInstance().GetByStreamKey(stream_key);
+        if (stream_entries.empty()) {
+            continue;
+        }
+
+        const StreamEntry stream_entry{entry_id};
+        std::vector<StreamEntry> find_results{};
+
+        for (const auto &entry: stream_entries) {
+            if (entry >= stream_entry) {
+                find_results.push_back(entry);
+            }
+        }
+
+        if (find_results.empty()) {
+            continue;
+        }
+
+        resp += "*2\r\n";
+        resp += RespParser::ToBulkString(stream_key);
+        resp += "*" + std::to_string(find_results.size()) + "\r\n";
+
+        for (const auto &item: find_results) {
+            resp += item.ToResp();
+        }
     }
 
     return resp;
