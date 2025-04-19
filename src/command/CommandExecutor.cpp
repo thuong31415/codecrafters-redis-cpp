@@ -179,8 +179,8 @@ std::string CommandExecutor::HandleXRangeCommand(const std::vector<RespEntry> &e
         return RespParser::Empty();
     }
 
-    const StreamEntry entry_start = "-" == start_key ? stream_entries[0] : StreamEntry{start_key};
-    const StreamEntry entry_end{end_key};
+    const StreamEntry entry_start = "-" == start_key ? stream_entries.front() : StreamEntry{start_key};
+    const StreamEntry entry_end = "+" == end_key ? stream_entries.back() : StreamEntry{end_key};
 
     std::vector<StreamEntry> result{};
 
