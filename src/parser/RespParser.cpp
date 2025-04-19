@@ -87,14 +87,18 @@ std::string RespParser::ToArrayString(const std::vector<std::string> &tokens) {
     return result;
 }
 
-std::string RespParser::ToError(const std::string &message) {
+std::string RespParser::Error(const std::string &message) {
     return "-" + message + "\r\n";
 }
 
-std::string RespParser::OkResponse() {
+std::string RespParser::Ok() {
     return ToSimpleString("OK");
 }
 
-std::string RespParser::NilResponse() {
+std::string RespParser::Nil() {
     return "$-1\r\n";
+}
+
+std::string RespParser::Empty() {
+    return "*0\r\n";
 }

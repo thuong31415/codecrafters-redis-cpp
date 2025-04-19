@@ -24,14 +24,14 @@ std::string RedisStream::Add(const std::string &stream_key,
 
     const auto pos = entry_id.find('-');
     if (pos == std::string::npos) {
-        return RespParser::ToError("ERR wrong format of entry_id");
+        return RespParser::Error("ERR wrong format of entry_id");
     }
 
     const std::string timestamp_str = entry_id.substr(0, pos);
     const std::string sequence_str = entry_id.substr(pos + 1);
 
     if (!Utils::IsNumeric(timestamp_str)) {
-        return RespParser::ToError("ERR wrong number of arguments for 'xadd' command");
+        return RespParser::Error("ERR wrong number of arguments for 'xadd' command");
     }
 
     new_timestamp = std::stoll(timestamp_str);
@@ -42,7 +42,7 @@ std::string RedisStream::Add(const std::string &stream_key,
         } else if (Utils::IsNumeric(sequence_str)) {
             new_sequence = std::stoll(sequence_str);
         } else {
-            return RespParser::ToError("ERR wrong number of arguments for 'xadd' command");
+            return RespParser::Error("ERR wrong number of arguments for 'xadd' command");
         }
         return add_new_stream();
     }
@@ -55,18 +55,18 @@ std::string RedisStream::Add(const std::string &stream_key,
     } else if (Utils::IsNumeric(sequence_str)) {
         new_sequence = std::stoll(sequence_str);
     } else {
-        return RespParser::ToError("ERR wrong number of arguments for 'xadd' command");
+        return RespParser::Error("ERR wrong number of arguments for 'xadd' command");
     }
 
     if (new_timestamp == 0 && new_sequence == 0) {
-        return RespParser::ToError("ERR The ID specified in XADD must be greater than 0-0");
+        return RespParser::Error("ERR The ID specified in XADD must be greater than 0-0");
     }
 
     const bool is_valid_sequence = new_timestamp > last_entry.timestamp
                                    || (new_timestamp == last_entry.timestamp && new_sequence > last_entry.sequence);
 
     if (!is_valid_sequence) {
-        return RespParser::ToError("ERR The ID specified in XADD is equal or smaller than the target stream top item");
+        return RespParser::Error("ERR The ID specified in XADD is equal or smaller than the target stream top item");
     }
     return add_new_stream();
 }
@@ -74,3 +74,11 @@ std::string RedisStream::Add(const std::string &stream_key,
 bool RedisStream::ExistStreamKey(const std::string &stream_key) const {
     return stream_entries_.contains(stream_key);
 }
+
+std::vector<StreamEntry> RedisStream::GetByStreamKey(const std::string &stream_key) const {
+    if (stream_entries_.contains(stream_key)) {
+        return stream_entries_.at(stream_key);
+    }
+    return std::vector<StreamEntry>();
+}
+

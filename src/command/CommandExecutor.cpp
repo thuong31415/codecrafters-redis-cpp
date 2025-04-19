@@ -16,20 +16,21 @@ std::unordered_map<std::string, CommandExecutor::CommandHandler> CommandExecutor
     {"CONFIG", HandleConfigCommand},
     {"KEYS", HandleKeyCommand},
     {"TYPE", HandleTypeCommand},
-    {"XADD", HandleXAddCommand}
+    {"XADD", HandleXAddCommand},
+    {"XRANGE", HandleXRangeCommand}
 };
 
 std::string CommandExecutor::Executor(const std::string &input) {
     const RespEntry entry = RespParser::ParseCommand(input);
 
     if (entry.type != RespType::array) {
-        return RespParser::ToError("ERR Protocol error: expected array for command");
+        return RespParser::Error("ERR Protocol error: expected array for command");
     }
 
     const auto &items = std::get<std::vector<RespEntry> >(entry.value);
 
     if (items.empty() || items[0].type != RespType::bulk_string) {
-        return RespParser::ToError("ERR Protocol error: invalid command array");
+        return RespParser::Error("ERR Protocol error: invalid command array");
     }
 
     auto cmd = std::get<std::string>(items[0].value);
@@ -38,7 +39,7 @@ std::string CommandExecutor::Executor(const std::string &input) {
     if (const auto it = command_handler_.find(cmd); it != command_handler_.end()) {
         return it->second(items);
     }
-    return RespParser::ToError("ERR wrong Command");
+    return RespParser::Error("ERR wrong Command");
 }
 
 std::string CommandExecutor::HandlePingCommand(const std::vector<RespEntry> &entries) {
@@ -47,7 +48,7 @@ std::string CommandExecutor::HandlePingCommand(const std::vector<RespEntry> &ent
 
 std::string CommandExecutor::HandleEchoCommand(const std::vector<RespEntry> &entries) {
     if (entries.size() != 2 || entries[1].type != RespType::bulk_string) {
-        return RespParser::ToError("ERR wrong number of arguments for 'echo' command");
+        return RespParser::Error("ERR wrong number of arguments for 'echo' command");
     }
     const auto &arg = std::get<std::string>(entries[1].value);
     return RespParser::ToBulkString(arg);
@@ -55,19 +56,19 @@ std::string CommandExecutor::HandleEchoCommand(const std::vector<RespEntry> &ent
 
 std::string CommandExecutor::HandleGetCommand(const std::vector<RespEntry> &entries) {
     if (entries.size() != 2 || entries[1].type != RespType::bulk_string) {
-        return RespParser::ToError("ERR wrong number of arguments for 'get' command");
+        return RespParser::Error("ERR wrong number of arguments for 'get' command");
     }
 
     const auto &key = std::get<std::string>(entries[1].value);
 
     const auto &value = RedisDatabase::GetInstance().Get(key);
 
-    return "nil" != value ? RespParser::ToBulkString(value) : RespParser::NilResponse();
+    return "nil" != value ? RespParser::ToBulkString(value) : RespParser::Nil();
 }
 
 std::string CommandExecutor::HandleSetCommand(const std::vector<RespEntry> &entries) {
     if (entries.size() < 3) {
-        return RespParser::ToError("ERR wrong number of arguments for 'set' command");
+        return RespParser::Error("ERR wrong number of arguments for 'set' command");
     }
 
     const std::string key = std::get<std::string>(entries[1].value);
@@ -75,7 +76,7 @@ std::string CommandExecutor::HandleSetCommand(const std::vector<RespEntry> &entr
 
     if (entries.size() == 3) {
         RedisDatabase::GetInstance().Set(key, value);
-        return RespParser::OkResponse();
+        return RespParser::Ok();
     }
 
     if (entries.size() == 5) {
@@ -83,34 +84,34 @@ std::string CommandExecutor::HandleSetCommand(const std::vector<RespEntry> &entr
         std::ranges::transform(option, option.begin(), ::toupper);
 
         if (option != "PX" && option != "EX") {
-            return RespParser::ToError("ERR syntax error");
+            return RespParser::Error("ERR syntax error");
         }
 
         const std::string ttl_str = std::get<std::string>(entries[4].value);
 
         if (!Utils::IsNumeric(ttl_str)) {
-            return RespParser::ToError("ERR value is not an integer or out of range");
+            return RespParser::Error("ERR value is not an integer or out of range");
         }
 
         const int64_t ttl = option == "PX" ? std::stoll(ttl_str) : std::stoll(ttl_str) * 1000;
 
         RedisDatabase::GetInstance().Set(key, value, ttl);
-        return RespParser::OkResponse();
+        return RespParser::Ok();
     }
 
-    return RespParser::ToError("ERR syntax error");
+    return RespParser::Error("ERR syntax error");
 }
 
 std::string CommandExecutor::HandleConfigCommand(const std::vector<RespEntry> &entries) {
     if (entries.size() != 3) {
-        return RespParser::ToError("ERR wrong number of arguments for 'config' command");
+        return RespParser::Error("ERR wrong number of arguments for 'config' command");
     }
 
     auto sub_cmd = std::get<std::string>(entries[1].value);
     std::ranges::transform(sub_cmd, sub_cmd.begin(), ::toupper);
 
     if (sub_cmd != "GET") {
-        return RespParser::ToError("ERR unknown subcommand");
+        return RespParser::Error("ERR unknown subcommand");
     }
 
     Config &config = Config::GetInstance();
@@ -125,7 +126,7 @@ std::string CommandExecutor::HandleConfigCommand(const std::vector<RespEntry> &e
 
 std::string CommandExecutor::HandleKeyCommand(const std::vector<RespEntry> &entries) {
     if (entries.size() != 2) {
-        return RespParser::ToError("ERR wrong number of arguments for 'keys' command");
+        return RespParser::Error("ERR wrong number of arguments for 'keys' command");
     }
     const auto keys = RedisDatabase::GetInstance().GetAllKeys();
 
@@ -134,7 +135,7 @@ std::string CommandExecutor::HandleKeyCommand(const std::vector<RespEntry> &entr
 
 std::string CommandExecutor::HandleTypeCommand(const std::vector<RespEntry> &entries) {
     if (entries.size() != 2) {
-        return RespParser::ToError("ERR wrong number of arguments for 'type' command");
+        return RespParser::Error("ERR wrong number of arguments for 'type' command");
     }
 
     const auto key = std::get<std::string>(entries[1].value);
@@ -151,15 +152,52 @@ std::string CommandExecutor::HandleTypeCommand(const std::vector<RespEntry> &ent
 }
 
 std::string CommandExecutor::HandleXAddCommand(const std::vector<RespEntry> &entries) {
-
     if (entries.size() != 5) {
-        return RespParser::ToError("ERR wrong number of arguments for 'xadd' command");
+        return RespParser::Error("ERR wrong number of arguments for 'xadd' command");
     }
 
-    const auto stream_name = std::get<std::string>(entries[1].value);
+    const auto stream_key = std::get<std::string>(entries[1].value);
     const auto entry_id = std::get<std::string>(entries[2].value);
     const auto key = std::get<std::string>(entries[3].value);
     const auto value = std::get<std::string>(entries[4].value);
 
-    return RedisStream::GetInstance().Add(stream_name, entry_id, key, value);
+    return RedisStream::GetInstance().Add(stream_key, entry_id, key, value);
+}
+
+std::string CommandExecutor::HandleXRangeCommand(const std::vector<RespEntry> &entries) {
+    if (entries.size() != 4) {
+        return RespParser::Error("ERR wrong number of arguments for 'xrange' command");
+    }
+
+    const auto stream_key = std::get<std::string>(entries[1].value);
+    const auto start_key = std::get<std::string>(entries[2].value);
+    const auto end_key = std::get<std::string>(entries[3].value);
+
+    const std::vector<StreamEntry> stream_entries = RedisStream::GetInstance().GetByStreamKey(stream_key);
+
+    if (stream_entries.empty()) {
+        return RespParser::Empty();
+    }
+
+    const StreamEntry entry_start{start_key};
+    const StreamEntry entry_end{end_key};
+
+    std::vector<StreamEntry> result{};
+
+    for (const auto &entry: stream_entries) {
+        if (entry >= entry_start && entry <= entry_end) {
+            result.push_back(entry);
+        }
+    }
+
+    if (result.empty()) {
+        return RespParser::Empty();
+    }
+
+    std::string resp = "*" + std::to_string(result.size()) + "\r\n";
+
+    for (const auto &item: result) {
+        resp += item.ToResp();
+    }
+    return resp;
 }

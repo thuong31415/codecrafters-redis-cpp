@@ -19,11 +19,23 @@ public:
 
     static std::string ToArrayString(const std::vector<std::string> &tokens);
 
-    static  std::string ToError(const std::string &message);
+    static std::string Error(const std::string &message);
 
-    static std::string OkResponse();
+    static std::string Ok();
 
-    static std::string NilResponse();
+    static std::string Nil();
+
+    static std::string Empty();
+
+    template<typename... Args>
+    static std::string ToArrayString(const std::string &first, const Args &... args) {
+        const std::vector<std::string> tokens = {first, args...};
+        std::string result = "*" + std::to_string(tokens.size()) + "\r\n";
+        for (const auto &token: tokens) {
+            result += ToBulkString(token);
+        }
+        return result;
+    }
 
 private:
     static RespEntry ParseEntry(const std::string &input, size_t &pos);
