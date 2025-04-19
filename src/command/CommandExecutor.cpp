@@ -17,7 +17,8 @@ std::unordered_map<std::string, CommandExecutor::CommandHandler> CommandExecutor
     {"KEYS", HandleKeyCommand},
     {"TYPE", HandleTypeCommand},
     {"XADD", HandleXAddCommand},
-    {"XRANGE", HandleXRangeCommand}
+    {"XRANGE", HandleXRangeCommand},
+    {"XREAD", HandleXReadCommand}
 };
 
 std::string CommandExecutor::Executor(const std::string &input) {
@@ -199,5 +200,52 @@ std::string CommandExecutor::HandleXRangeCommand(const std::vector<RespEntry> &e
     for (const auto &item: result) {
         resp += item.ToResp();
     }
+    return resp;
+}
+
+std::string CommandExecutor::HandleXReadCommand(const std::vector<RespEntry> &entries) {
+    if (entries.size() != 4) {
+        return RespParser::Error("ERR wrong number of arguments for 'xread' command");
+    }
+
+    auto sub_command = std::get<std::string>(entries[1].value);
+    std::ranges::transform(sub_command, sub_command.begin(), ::toupper);
+
+    if (sub_command.empty() || sub_command != "STREAMS") {
+        return RespParser::Error("ERR syntax error");
+    }
+
+    const auto stream_key = std::get<std::string>(entries[2].value);
+    const auto entry_id = std::get<std::string>(entries[3].value);
+
+    const std::vector<StreamEntry> stream_entries = RedisStream::GetInstance().GetByStreamKey(stream_key);
+
+    if (stream_entries.empty()) {
+        return RespParser::Empty();
+    }
+
+    const StreamEntry stream_entry{entry_id};
+
+    std::vector<StreamEntry> find_results{};
+
+    for (const auto &entry: stream_entries) {
+        if (entry >= stream_entry) {
+            find_results.push_back(entry);
+        }
+    }
+
+    if (find_results.empty()) {
+        return RespParser::Nil();
+    }
+
+    std::string resp = "*1\r\n";
+    resp += "*2\r\n";
+    resp += RespParser::ToBulkString(stream_key);
+    resp += "*" + std::to_string(find_results.size()) + "\r\n";
+
+    for (const auto &item: find_results) {
+        resp += item.ToResp();
+    }
+
     return resp;
 }

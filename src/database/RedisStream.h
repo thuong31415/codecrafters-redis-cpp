@@ -67,6 +67,10 @@ struct StreamEntry {
         }
         return sequence > other.sequence;
     }
+
+    bool operator==(const StreamEntry &other) const {
+        return timestamp == other.timestamp && sequence == other.sequence;
+    }
 };
 
 class RedisStream {

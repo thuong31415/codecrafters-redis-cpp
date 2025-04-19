@@ -35,5 +35,5 @@ private:
 
     static std::string HandleXRangeCommand(const std::vector<RespEntry> &entries);
 
-
+    static std::string HandleXReadCommand(const std::vector<RespEntry> &entries);
 };
