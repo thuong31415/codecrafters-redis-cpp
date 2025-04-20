@@ -21,4 +21,8 @@ struct RespEntry {
     RespEntry(const RespType t, int64_t v) : type(t), value(v) {}
     RespEntry(const RespType t, std::vector<RespEntry> v) : type(t), value(std::move(v)) {}
     RespEntry(const RespType t, std::monostate) : type(t), value(std::monostate{}) {}
+
+    std::string AsString() const {
+        return std::get<std::string>(value);
+    }
 };
