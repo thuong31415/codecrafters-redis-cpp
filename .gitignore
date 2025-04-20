@@ -33,6 +33,8 @@
 server
 
 # CMake
+cmake-build-*/
+.cmake/
 CMakeLists.txt.user
 CMakeCache.txt
 CMakeFiles
@@ -48,7 +50,4 @@ _deps
 build/
 vcpkg_installed
 
-cmake-build-debug/
-
-#ide
 .idea/
