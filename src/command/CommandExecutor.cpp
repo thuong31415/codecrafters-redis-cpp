@@ -162,7 +162,16 @@ std::string CommandExecutor::HandleXAddCommand(const std::vector<RespEntry> &ent
     const auto key = std::get<std::string>(entries[3].value);
     const auto value = std::get<std::string>(entries[4].value);
 
-    return RedisStream::GetInstance().Add(stream_key, entry_id, key, value);
+    std::string add_response = RedisStream::GetInstance().Add(stream_key, entry_id, key, value);
+
+    if (is_blocked_) {
+
+        is_blocked_ = false;
+        has_data_ = true;
+        cv_.notify_one();
+    }
+
+    return add_response;
 }
 
 std::string CommandExecutor::HandleXRangeCommand(const std::vector<RespEntry> &entries) {
@@ -204,7 +213,6 @@ std::string CommandExecutor::HandleXRangeCommand(const std::vector<RespEntry> &e
 }
 
 std::string CommandExecutor::HandleXReadCommand(const std::vector<RespEntry> &entries) {
-
     if (entries.size() < 4) {
         return RespParser::Error("ERR wrong number of arguments for 'xread' command");
     }
@@ -212,13 +220,27 @@ std::string CommandExecutor::HandleXReadCommand(const std::vector<RespEntry> &en
     auto sub_command = std::get<std::string>(entries[1].value);
     std::ranges::transform(sub_command, sub_command.begin(), ::toupper);
 
-    if (sub_command.empty() || sub_command != "STREAMS") {
+    if (sub_command.empty() || (sub_command != "STREAMS" && sub_command != "BLOCK")) {
         return RespParser::Error("ERR syntax error");
     }
 
+    if (sub_command == "BLOCK") {
+        const int64_t timeout_ms = std::stoll(entries[2].AsString());
+
+        is_blocked_ = true;
+
+        std::unique_lock lock(mutex_);
+
+        cv_.wait_for(lock, std::chrono::milliseconds(timeout_ms), [] {
+            return has_data_;
+        });
+    }
+
+    const int start_pos_stream_key = sub_command == "STREAMS" ? 2 : 4;
+
     std::vector<std::string> stream_keys{}, entry_ids{};
 
-    for (int i = 2; i < entries.size(); i++) {
+    for (int i = start_pos_stream_key; i < entries.size(); i++) {
         auto data = std::get<std::string>(entries[i].value);
         if (data.find("-") != std::string::npos) {
             entry_ids.push_back(data);
@@ -228,15 +250,15 @@ std::string CommandExecutor::HandleXReadCommand(const std::vector<RespEntry> &en
     }
 
     if (stream_keys.size() != entry_ids.size()) {
-        return RespParser::Error("ERR Unbalanced 'xread' list of streams: for each stream key an ID or '$' must be specified.");
+        return RespParser::Error(
+            "ERR Unbalanced 'xread' list of streams: for each stream key an ID or '$' must be specified.");
     }
 
     std::string resp = "*" + std::to_string(stream_keys.size()) + "\r\n";
 
     for (int i = 0; i < static_cast<int>(stream_keys.size()); i++) {
-
-        const auto stream_key = stream_keys[i];
-        const auto entry_id = entry_ids[i];
+        const auto &stream_key = stream_keys[i];
+        const auto &entry_id = entry_ids[i];
 
         const auto stream_entries = RedisStream::GetInstance().GetByStreamKey(stream_key);
         if (stream_entries.empty()) {

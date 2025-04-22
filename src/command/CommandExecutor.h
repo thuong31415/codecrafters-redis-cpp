@@ -1,6 +1,9 @@
 #pragma once
+#include <condition_variable>
 #include <string>
 #include <functional>
+#include <mutex>
+
 #include "../database/RdbReader.h"
 #include "../parser/RespParser.h"
 
@@ -14,6 +17,11 @@ public:
 
 private:
     RdbReader rdb_reader_{};
+
+    inline static std::mutex mutex_;
+    inline static std::condition_variable cv_;
+    inline static bool is_blocked_{false};
+    inline static bool has_data_{false};
 
     static std::unordered_map<std::string, CommandHandler> command_handler_;
 

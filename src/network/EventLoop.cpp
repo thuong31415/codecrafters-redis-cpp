@@ -39,13 +39,24 @@ void EventLoop::AddFd(const int fd, const uint32_t events, const EventCallback &
     callbacks_[fd] = callback;;
 }
 
+bool EventLoop::UpdateFd(const int fd, const uint32_t events) const {
+    epoll_event event{};
+    event.events = events;
+    event.data.fd = fd;
+    if (epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &event) < 0) {
+        std::cerr << "epoll_ctl EPOLL_CTL_MOD failed for fd " << fd << ": " << strerror(errno) << std::endl;
+        return false;
+    }
+    return true;
+}
+
+
 void EventLoop::RemoveFd(const int fd) {
     if (epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr) < 0 && errno != EBADF) {
         std::cerr << "Warning: Failed to remove fd from epoll: " << strerror(errno) << std::endl;
     }
 
     shutdown(fd, SHUT_RDWR);
-    close(fd);
 
     std::unique_lock lock(callbacks_mutex_);
     callbacks_.erase(fd);
@@ -61,9 +72,16 @@ void EventLoop::SetNonBlocking(const int fd) {
     }
 }
 
+
+boost::asio::io_context &EventLoop::GetIoContext() {
+    return io_context_;
+}
+
 void EventLoop::Run() {
+    boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work_guard(io_context_.get_executor());
+
     while (true) {
-        const int n = epoll_wait(epoll_fd_, events_.data(), max_events_, -1);
+        const int n = epoll_wait(epoll_fd_, events_.data(), max_events_, 10);
 
         if (n < 0) {
             if (errno == EINTR) continue;
@@ -74,8 +92,7 @@ void EventLoop::Run() {
             int fd = events_[i].data.fd;
             const uint32_t event_flags = events_[i].events;
 
-            EventCallback callback;
-            {
+            EventCallback callback; {
                 std::shared_lock lock(callbacks_mutex_);
                 if (auto it = callbacks_.find(fd); it != callbacks_.end()) {
                     callback = it->second;
@@ -85,5 +102,6 @@ void EventLoop::Run() {
                 callback(fd, event_flags);
             }
         }
+        io_context_.poll();
     }
 }
